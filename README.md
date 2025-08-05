@@ -17,3 +17,14 @@ Try it here: [YOUR STREAMLIT URL]
 
 ### 💡 Purpose:
 Built to demonstrate understanding of valuation models, financial logic, and basic data visualization — combining finance and tech.
+
+
+
+
+
+
+
+
+
+
+© 2025 Om Bhand. All rights reserved.
