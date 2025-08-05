@@ -72,3 +72,4 @@ df_table = pd.DataFrame(
     columns=[f"{int(r*100)}%" for r in discount_rates]
 )
 st.dataframe(df_table.style.format("{:.2f}"), height=250)
+st.markdown("© 2025 Om Bhand. All rights reserved.", unsafe_allow_html=True)
