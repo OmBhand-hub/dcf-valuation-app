@@ -5,6 +5,46 @@ import yfinance as yf
 
 st.set_page_config(page_title="DCF Valuation App", layout="centered")
 st.title("📊 DCF Valuation App")
+import yfinance as yf
+
+st.subheader("Enter Stock Ticker to Auto-Fill Financials")
+ticker = st.text_input("Enter stock ticker (e.g., AAPL, MSFT, TSLA)", value="AAPL")
+
+if ticker:
+    try:
+        stock = yf.Ticker(ticker)
+
+        # Fetch Market Cap (Equity Value)
+        equity_value = stock.info.get("marketCap", 0)
+
+        # Fetch Total Liabilities (as proxy for debt)
+        balance_sheet = stock.balance_sheet
+        if "Total Liab" in balance_sheet.index:
+            debt_value = float(balance_sheet.loc["Total Liab"][0])
+        else:
+            debt_value = 0
+
+        # Fetch Free Cash Flow
+        cashflow = stock.cashflow
+        if "Total Cash From Operating Activities" in cashflow.index and "Capital Expenditures" in cashflow.index:
+            fcf = float(cashflow.loc["Total Cash From Operating Activities"][0] - cashflow.loc["Capital Expenditures"][0])
+        else:
+            fcf = 0
+
+        fcf = round(fcf / 1e6, 2)  # convert to millions
+        equity_value = round(equity_value, 2)
+        debt_value = round(debt_value, 2)
+
+        st.success(f"Fetched values for {ticker}: FCF = ${fcf}M, Equity = ${equity_value}, Debt = ${debt_value}")
+    except Exception as e:
+        st.warning("Could not fetch data. Please check the ticker or try again later.")
+        fcf = 0
+        equity_value = 0
+        debt_value = 0
+else:
+    fcf = 0
+    equity_value = 0
+    debt_value = 0
 
 st.markdown("""
 Estimate the intrinsic value of a company using a Discounted Cash Flow (DCF) model.
@@ -31,8 +71,8 @@ if ticker:
 st.markdown("---")
 st.subheader("Step 1: Calculate WACC (Weighted Average Cost of Capital)")
 
-equity_value = st.number_input("Equity Value (£)", min_value=0.0, step=100000.0)
-debt_value = st.number_input("Debt Value (£)", min_value=0.0, step=100000.0)
+equity_value = st.number_input("Equity Value (£)", min_value=0.0, value=equity_value, step=100000.0)
+debt_value = st.number_input("Debt Value (£)", min_value=0.0, value=debt_value, step=100000.0)
 cost_of_equity = st.number_input("Cost of Equity (%)", min_value=0.0, max_value=100.0, step=0.1)
 cost_of_debt = st.number_input("Cost of Debt (%)", min_value=0.0, max_value=100.0, step=0.1)
 tax_rate = st.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, step=0.1)
@@ -49,7 +89,7 @@ else:
 st.markdown("---")
 st.subheader("Step 2: DCF Inputs")
 
-fcf = st.number_input("Enter current Free Cash Flow (in millions)", min_value=0.0, value=100.0, step=10.0)
+fcf = st.number_input("Enter current Free Cash Flow (in millions)", min_value=0.0, value=fcf, step=10.0)
 growth_rate = st.number_input("Expected annual growth rate (%)", min_value=0.0, value=5.0, step=0.5)
 discount_rate = wacc
 st.markdown(f"**Calculated WACC as Discount Rate:** {wacc*100:.2f}%")
