@@ -1,7 +1,34 @@
 import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+import yfinance as yf
 
+st.set_page_config(page_title="DCF Valuation App", layout="centered")
 st.title("📊 DCF Valuation App")
 
+st.markdown("""
+Estimate the intrinsic value of a company using a Discounted Cash Flow (DCF) model.
+""")
+
+# Company Ticker Input
+ticker = st.text_input("Enter Ticker Symbol (e.g., AAPL, MSFT, TSLA)").upper()
+
+if ticker:
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+
+        st.subheader(f"📄 Company Overview: {info.get('shortName', 'N/A')}")
+        st.write(f"**Sector:** {info.get('sector', 'N/A')}")
+        st.write(f"**Industry:** {info.get('industry', 'N/A')}")
+        st.write(f"**Market Cap:** ${round(info.get('marketCap', 0)/1e9,2)} Billion")
+        st.write(f"**Trailing P/E:** {info.get('trailingPE', 'N/A')}")
+        st.write(f"**Beta:** {info.get('beta', 'N/A')}")
+
+    except:
+        st.error("Could not fetch data. Please check the ticker.")
+
+st.markdown("---")
 st.subheader("Step 1: Calculate WACC (Weighted Average Cost of Capital)")
 
 equity_value = st.number_input("Equity Value (£)", min_value=0.0, step=100000.0)
@@ -19,17 +46,17 @@ else:
     wacc = 0
     st.warning("Enter equity and debt values to calculate WACC.")
 
-st.markdown("Estimate a company's intrinsic value using Discounted Cash Flow (DCF) model.")
+st.markdown("---")
+st.subheader("Step 2: DCF Inputs")
 
-# Input fields
 fcf = st.number_input("Enter current Free Cash Flow (in millions)", min_value=0.0, value=100.0, step=10.0)
 growth_rate = st.number_input("Expected annual growth rate (%)", min_value=0.0, value=5.0, step=0.5)
 discount_rate = wacc
-st.markdown(f"**Calculated WACC:** {wacc*100:.2f}%")
+st.markdown(f"**Calculated WACC as Discount Rate:** {wacc*100:.2f}%")
 years = st.slider("Number of years to project", min_value=1, max_value=10, value=5)
 terminal_growth = st.number_input("Terminal growth rate (%)", min_value=0.0, value=2.0, step=0.5)
 
-# DCF logic
+# DCF calculation
 fcf_list = []
 for i in range(1, years + 1):
     future_fcf = fcf * (1 + growth_rate / 100) ** i
@@ -41,40 +68,17 @@ last_fcf = fcf * (1 + growth_rate / 100) ** years
 terminal_value = (last_fcf * (1 + terminal_growth / 100)) / (discount_rate / 100 - terminal_growth / 100)
 discounted_terminal = terminal_value / ((1 + discount_rate / 100) ** years)
 
-# Result
 dcf_value = sum(fcf_list) + discounted_terminal
 st.subheader(f"💰 Estimated Intrinsic Value: **${round(dcf_value, 2)} million**")
-st.subheader("📊 Market Multiples Sanity Check (Optional)")
 
-with st.expander("Enter values to get alternative valuation comparisons"):
-    net_income = st.number_input("Net Income (in millions)", min_value=0.0, value=0.0)
-    pe_ratio = st.number_input("Industry Average P/E Ratio", min_value=0.0, value=15.0)
-
-    ebitda = st.number_input("EBITDA (in millions)", min_value=0.0, value=0.0)
-    ev_ebitda = st.number_input("Industry Average EV/EBITDA", min_value=0.0, value=10.0)
-
-# P/E Valuation
-if net_income > 0 and pe_ratio > 0:
-    pe_valuation = net_income * pe_ratio
-    st.markdown(f"**📌 Valuation based on P/E:** ${round(pe_valuation, 2)} million")
-
-# EV/EBITDA Valuation
-if ebitda > 0 and ev_ebitda > 0:
-    ev_valuation = ebitda * ev_ebitda
-    st.markdown(f"**📌 Valuation based on EV/EBITDA:** ${round(ev_valuation, 2)} million")
-
-import pandas as pd
-import matplotlib.pyplot as plt
-
-# Chart 1: Projected Free Cash Flows
+# Charts
 years_range = list(range(1, years + 1))
-future_fcf_list = [fcf * (1 + growth_rate) ** i for i in years_range]
+future_fcf_list = [fcf * (1 + growth_rate / 100) ** i for i in years_range]
 
 st.subheader("📈 Projected Free Cash Flows")
 fcf_df = pd.DataFrame({'Year': years_range, 'Future FCF': future_fcf_list})
 st.line_chart(fcf_df.set_index("Year"))
 
-# Chart 2: Intrinsic Value Breakdown
 st.subheader("💰 Intrinsic Value Breakdown")
 labels = ['Discounted FCF', 'Discounted Terminal Value']
 values = [sum(fcf_list), discounted_terminal]
@@ -82,13 +86,13 @@ fig, ax = plt.subplots()
 ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90)
 ax.axis('equal')
 st.pyplot(fig)
+
 st.subheader("📊 Sensitivity Analysis")
 
-# Define ranges
+# Ranges
 discount_rates = [0.08, 0.09, 0.10, 0.11, 0.12]
 growth_rates = [0.01, 0.02, 0.03, 0.04, 0.05]
 
-# Create table
 table = []
 for g in growth_rates:
     row = []
@@ -102,31 +106,11 @@ for g in growth_rates:
         row.append(round(total_value, 2))
     table.append(row)
 
-# Display table
 df_table = pd.DataFrame(
     table,
     index=[f"{int(g*100)}%" for g in growth_rates],
     columns=[f"{int(r*100)}%" for r in discount_rates]
 )
 st.dataframe(df_table.style.format("{:.2f}"), height=250)
-st.subheader("📋 Valuation Summary")
-
-# Create metric cards
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.metric(label="💰 DCF Valuation", value=f"${round(dcf_value, 2)}M")
-
-with col2:
-    if net_income > 0 and pe_ratio > 0:
-        st.metric(label="📈 P/E Valuation", value=f"${round(pe_valuation, 2)}M")
-    else:
-        st.metric(label="📈 P/E Valuation", value="N/A")
-
-with col3:
-    if ebitda > 0 and ev_ebitda > 0:
-        st.metric(label="📊 EV/EBITDA Valuation", value=f"${round(ev_valuation, 2)}M")
-    else:
-        st.metric(label="📊 EV/EBITDA Valuation", value="N/A")
 
 st.markdown("© 2025 Om Bhand. All rights reserved.", unsafe_allow_html=True)
