@@ -6,6 +6,7 @@ print("Welcome to the DCF Valuation App")
 import yfinance as yf
 
 ticker = input("Enter stock ticker (e.g., AAPL, MSFT): ").upper()
+print(f"\n--- Valuing: {ticker} ---\n")
 
 stock = yf.Ticker(ticker)
 info = stock.info
@@ -25,8 +26,13 @@ try:
 except Exception as e:
     print(f"Error fetching data: {e}")
 
-# Use net income as a proxy for FCF (you can refine this later)
-fcf = net_income / 1_000_000 if net_income else float(input("Enter FCF manually (in millions): "))
+# Use net income as a proxy for FCF
+if net_income:
+    fcf = round(net_income / 1_000_000, 2)
+    print(f"\nUsing Net Income as proxy for FCF: ${fcf} million")
+else:
+    fcf = float(input("Net income not available. Please enter FCF manually (in millions): "))
+
 growth_rate = float(input("Enter expected annual growth rate (in %): ")) / 100
 discount_rate = float(input("Enter discount rate / WACC (in %): ")) / 100
 years = int(input("Enter number of years for projection: "))
