@@ -3,11 +3,35 @@
 # Step 1: Get user inputs
 print("Welcome to the DCF Valuation App")
 
-fcf = float(input("Enter current Free Cash Flow (in millions): "))
+import yfinance as yf
+
+ticker = input("Enter stock ticker (e.g., AAPL, MSFT): ").upper()
+
+stock = yf.Ticker(ticker)
+info = stock.info
+
+try:
+    revenue = info.get("totalRevenue", None)
+    ebit = info.get("ebit", None)
+    net_income = info.get("netIncome", None)
+
+    if revenue and ebit and net_income:
+        print(f"\nFetched Financials for {ticker}:")
+        print(f"Revenue: ${revenue:,}")
+        print(f"EBIT: ${ebit:,}")
+        print(f"Net Income: ${net_income:,}")
+    else:
+        print("Some financial data is missing.")
+except Exception as e:
+    print(f"Error fetching data: {e}")
+
+# Use net income as a proxy for FCF (you can refine this later)
+fcf = net_income / 1_000_000 if net_income else float(input("Enter FCF manually (in millions): "))
 growth_rate = float(input("Enter expected annual growth rate (in %): ")) / 100
 discount_rate = float(input("Enter discount rate / WACC (in %): ")) / 100
 years = int(input("Enter number of years for projection: "))
 terminal_growth = float(input("Enter terminal growth rate (in %): ")) / 100
+
 
 # Step 2: Project future FCFs
 fcf_list = []
