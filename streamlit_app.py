@@ -44,6 +44,25 @@ discounted_terminal = terminal_value / ((1 + discount_rate / 100) ** years)
 # Result
 dcf_value = sum(fcf_list) + discounted_terminal
 st.subheader(f"💰 Estimated Intrinsic Value: **${round(dcf_value, 2)} million**")
+st.subheader("📊 Market Multiples Sanity Check (Optional)")
+
+with st.expander("Enter values to get alternative valuation comparisons"):
+    net_income = st.number_input("Net Income (in millions)", min_value=0.0, value=0.0)
+    pe_ratio = st.number_input("Industry Average P/E Ratio", min_value=0.0, value=15.0)
+
+    ebitda = st.number_input("EBITDA (in millions)", min_value=0.0, value=0.0)
+    ev_ebitda = st.number_input("Industry Average EV/EBITDA", min_value=0.0, value=10.0)
+
+# P/E Valuation
+if net_income > 0 and pe_ratio > 0:
+    pe_valuation = net_income * pe_ratio
+    st.markdown(f"**📌 Valuation based on P/E:** ${round(pe_valuation, 2)} million")
+
+# EV/EBITDA Valuation
+if ebitda > 0 and ev_ebitda > 0:
+    ev_valuation = ebitda * ev_ebitda
+    st.markdown(f"**📌 Valuation based on EV/EBITDA:** ${round(ev_valuation, 2)} million")
+
 import pandas as pd
 import matplotlib.pyplot as plt
 
