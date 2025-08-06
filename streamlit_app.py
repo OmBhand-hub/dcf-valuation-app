@@ -50,41 +50,20 @@ st.markdown("""
 Estimate the intrinsic value of a company using a Discounted Cash Flow (DCF) model.
 """)
 
-# Company Ticker Input
-ticker = st.text_input("Enter Ticker Symbol (e.g., AAPL, MSFT, TSLA)").upper()
 
-if ticker:
-    try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-
-        st.subheader(f"📄 Company Overview: {info.get('shortName', 'N/A')}")
-        st.write(f"**Sector:** {info.get('sector', 'N/A')}")
-        st.write(f"**Industry:** {info.get('industry', 'N/A')}")
-        st.write(f"**Market Cap:** ${round(info.get('marketCap', 0)/1e9,2)} Billion")
-        st.write(f"**Trailing P/E:** {info.get('trailingPE', 'N/A')}")
-        st.write(f"**Beta:** {info.get('beta', 'N/A')}")
-
-    except:
-        st.error("Could not fetch data. Please check the ticker.")
-
-st.markdown("---")
-st.subheader("Step 1: Calculate WACC (Weighted Average Cost of Capital)")
-
-equity_value = st.number_input("Equity Value (£)", min_value=0.0, value=equity_value, step=100000.0)
-debt_value = st.number_input("Debt Value (£)", min_value=0.0, value=debt_value, step=100000.0)
-cost_of_equity = st.number_input("Cost of Equity (%)", min_value=0.0, max_value=100.0, step=0.1)
-cost_of_debt = st.number_input("Cost of Debt (%)", min_value=0.0, max_value=100.0, step=0.1)
+# Inputs for tax rate (still manual)
 tax_rate = st.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, step=0.1)
 
+# Only calculate WACC if equity and debt > 0
 total_value = equity_value + debt_value
 
 if total_value > 0:
-    wacc = ((equity_value / total_value) * (cost_of_equity / 100)) + ((debt_value / total_value) * (cost_of_debt / 100) * (1 - tax_rate / 100))
-    st.success(f"Calculated WACC: {wacc:.2%}")
+    wacc = ((equity_value / total_value) * (cost_of_equity / 100)) + \
+           ((debt_value / total_value) * (cost_of_debt / 100) * (1 - tax_rate / 100))
+    st.success(f"✅ Calculated WACC: {wacc:.2f}%")
 else:
     wacc = 0
-    st.warning("Enter equity and debt values to calculate WACC.")
+    st.warning("⚠️ Enter valid equity and debt values to calculate WACC.")
 
 st.markdown("---")
 st.subheader("Step 2: DCF Inputs")
