@@ -82,10 +82,15 @@ st.line_chart(fcf_df.set_index("Year"))
 st.subheader("💰 Intrinsic Value Breakdown")
 labels = ['Discounted FCF', 'Discounted Terminal Value']
 values = [sum(fcf_list), discounted_terminal]
-fig, ax = plt.subplots()
-ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90)
-ax.axis('equal')
-st.pyplot(fig)
+
+if all(v > 0 for v in values):
+    fig, ax = plt.subplots()
+    ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90)
+    ax.axis('equal')
+    st.pyplot(fig)
+else:
+    st.warning("⚠️ Unable to display pie chart: Values must be positive.")
+
 
 st.subheader("📊 Sensitivity Analysis")
 
