@@ -109,4 +109,24 @@ df_table = pd.DataFrame(
     columns=[f"{int(r*100)}%" for r in discount_rates]
 )
 st.dataframe(df_table.style.format("{:.2f}"), height=250)
+st.subheader("📋 Valuation Summary")
+
+# Create metric cards
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric(label="💰 DCF Valuation", value=f"${round(dcf_value, 2)}M")
+
+with col2:
+    if net_income > 0 and pe_ratio > 0:
+        st.metric(label="📈 P/E Valuation", value=f"${round(pe_valuation, 2)}M")
+    else:
+        st.metric(label="📈 P/E Valuation", value="N/A")
+
+with col3:
+    if ebitda > 0 and ev_ebitda > 0:
+        st.metric(label="📊 EV/EBITDA Valuation", value=f"${round(ev_valuation, 2)}M")
+    else:
+        st.metric(label="📊 EV/EBITDA Valuation", value="N/A")
+
 st.markdown("© 2025 Om Bhand. All rights reserved.", unsafe_allow_html=True)
