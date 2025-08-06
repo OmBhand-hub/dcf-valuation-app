@@ -2,12 +2,30 @@ import streamlit as st
 
 st.title("📊 DCF Valuation App")
 
+st.subheader("Step 1: Calculate WACC (Weighted Average Cost of Capital)")
+
+equity_value = st.number_input("Equity Value (£)", min_value=0.0, step=100000.0)
+debt_value = st.number_input("Debt Value (£)", min_value=0.0, step=100000.0)
+cost_of_equity = st.number_input("Cost of Equity (%)", min_value=0.0, max_value=100.0, step=0.1)
+cost_of_debt = st.number_input("Cost of Debt (%)", min_value=0.0, max_value=100.0, step=0.1)
+tax_rate = st.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, step=0.1)
+
+total_value = equity_value + debt_value
+
+if total_value > 0:
+    wacc = ((equity_value / total_value) * (cost_of_equity / 100)) + ((debt_value / total_value) * (cost_of_debt / 100) * (1 - tax_rate / 100))
+    st.success(f"Calculated WACC: {wacc:.2%}")
+else:
+    wacc = 0
+    st.warning("Enter equity and debt values to calculate WACC.")
+
 st.markdown("Estimate a company's intrinsic value using Discounted Cash Flow (DCF) model.")
 
 # Input fields
 fcf = st.number_input("Enter current Free Cash Flow (in millions)", min_value=0.0, value=100.0, step=10.0)
 growth_rate = st.number_input("Expected annual growth rate (%)", min_value=0.0, value=5.0, step=0.5)
-discount_rate = st.number_input("Discount rate / WACC (%)", min_value=0.0, value=10.0, step=0.5)
+discount_rate = wacc
+st.markdown(f"**Calculated WACC:** {wacc*100:.2f}%")
 years = st.slider("Number of years to project", min_value=1, max_value=10, value=5)
 terminal_growth = st.number_input("Terminal growth rate (%)", min_value=0.0, value=2.0, step=0.5)
 
