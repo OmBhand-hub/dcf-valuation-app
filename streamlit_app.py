@@ -68,7 +68,6 @@ else:
 st.markdown("---")
 st.subheader("Step 2: DCF Inputs")
 
-fcf = st.number_input("Enter current Free Cash Flow (in millions)", min_value=0.0, value=fcf, step=10.0)
 growth_rate = st.number_input("Expected annual growth rate (%)", min_value=0.0, value=5.0, step=0.5)
 discount_rate = wacc
 st.markdown(f"**Calculated WACC as Discount Rate:** {wacc*100:.2f}%")
