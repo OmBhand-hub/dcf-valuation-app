@@ -20,28 +20,21 @@ if ticker:
         # --- EQUITY VALUE ---
         equity_value = stock.info.get("marketCap", 0)
 
- # --- DEBT VALUE ---
-try:
-    balance_sheet = stock.balance_sheet
-    debt_value = 0
-
-    if balance_sheet is not None and not balance_sheet.empty:
-        if "Total Liab" in balance_sheet.index:
-            debt_value = balance_sheet.loc["Total Liab"].dropna().values[0]
-        elif "Total Liab" in balance_sheet.columns:
-            debt_value = balance_sheet["Total Liab"].dropna().values[0]
-
-    debt_value = float(debt_value)
-
-except Exception as e:
-    st.warning(f"⚠️ Couldn't extract debt: {e}")
-    debt_value = 0
-
-    
+        # --- DEBT VALUE ---
+        try:
+            balance_sheet = stock.balance_sheet
+            if balance_sheet is not None and not balance_sheet.empty:
+                if "Total Liab" in balance_sheet.index:
+                    debt_value = balance_sheet.loc["Total Liab"].dropna().values[0]
+                elif "Total Liab" in balance_sheet.columns:
+                    debt_value = balance_sheet["Total Liab"].dropna().values[0]
+            debt_value = float(debt_value)
+        except Exception as e:
+            st.warning(f"⚠️ Couldn't extract debt: {e}")
+            debt_value = 0
 
         # --- FREE CASH FLOW ---
         cashflow = stock.cashflow
-        fcf = 0
         try:
             if "Free Cash Flow" in cashflow.index:
                 fcf = float(cashflow.loc["Free Cash Flow"][0])
@@ -72,12 +65,6 @@ except Exception as e:
         fcf = 0
         equity_value = 0
         debt_value = 0
-
-
-        st.success(f"Fetched values for {ticker.upper()}: FCF = {fcf/1e6:.1f}M, Equity = ${equity_value:,}, Debt = ${debt_value:,}")
-
-    except Exception as e:
-        st.warning("Could not fetch data. Please check the ticker or try again later.")
 
 st.markdown("Estimate the intrinsic value of a company using a Discounted Cash Flow (DCF) model.")
 
@@ -186,3 +173,4 @@ df_table = pd.DataFrame(
 st.dataframe(df_table.style.format("{:.2f}"), height=250)
 
 st.markdown("© 2025 Om Bhand. All rights reserved.", unsafe_allow_html=True)
+
