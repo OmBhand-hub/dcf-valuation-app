@@ -5,10 +5,13 @@ import yfinance as yf
 
 st.set_page_config(page_title="DCF Valuation App", layout="centered")
 st.title("📊 DCF Valuation App")
-import yfinance as yf
 
 st.subheader("Enter Stock Ticker to Auto-Fill Financials")
 ticker = st.text_input("Enter stock ticker (e.g., AAPL, MSFT, TSLA)", value="AAPL")
+
+fcf = 0
+equity_value = 0
+debt_value = 0
 
 if ticker:
     try:
@@ -32,60 +35,31 @@ if ticker:
             fcf = 0
 
         fcf = fcf or 0
-equity_value = equity_value or 0
-debt_value = debt_value or 0
+        equity_value = equity_value or 0
+        debt_value = debt_value or 0
 
-# Display values
-st.success(f"Fetched values for {ticker.upper()}: FCF = {fcf/1e6:.1f}M, Equity = {equity_value:,}, Debt = ${debt_value:,}")
-# Calculate total value and WACC inputs
+        st.success(f"Fetched values for {ticker.upper()}: FCF = {fcf/1e6:.1f}M, Equity = ${equity_value:,}, Debt = ${debt_value:,}")
+
+    except Exception as e:
+        st.warning("Could not fetch data. Please check the ticker or try again later.")
+
+st.markdown("Estimate the intrinsic value of a company using a Discounted Cash Flow (DCF) model.")
+
+# WACC Calculation
+tax_rate = st.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, value=21.0, step=0.1)
 total_value = equity_value + debt_value
 
 if total_value > 0:
-    cost_of_equity = 10  # you can later make this an input
+    cost_of_equity = 10
     cost_of_debt = 5
-    tax_rate = st.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, step=0.1, value=21.0)
-
     wacc = ((equity_value / total_value) * (cost_of_equity / 100)) + \
            ((debt_value / total_value) * (cost_of_debt / 100) * (1 - tax_rate / 100))
-
     st.success(f"✅ Calculated WACC: {wacc:.2%}")
 else:
     wacc = 0
     st.warning("⚠️ Enter valid equity and debt values to calculate WACC.")
 
-        st.success(f"Fetched values for {ticker}: FCF = ${fcf}M, Equity = ${equity_value}, Debt = ${debt_value}")
-    except Exception as e:
-        st.warning("Could not fetch data. Please check the ticker or try again later.")
-        fcf = 0
-        equity_value = 0
-        debt_value = 0
-else:
-    fcf = 0
-    equity_value = 0
-    debt_value = 0
-
-st.markdown("""
-Estimate the intrinsic value of a company using a Discounted Cash Flow (DCF) model.
-""")
-
-
-# Inputs for tax rate (still manual)
-tax_rate = st.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, step=0.1)
-
-# Only calculate WACC if equity and debt > 0
-total_value = equity_value + debt_value
-
-if total_value > 0:
-    cost_of_equity = 10  # assume 10% cost of equity
-    cost_of_debt = 5     # assume 5% cost of debt
-    wacc = ((equity_value / total_value) * (cost_of_equity / 100)) + \
-           ((debt_value / total_value) * (cost_of_debt / 100) * (1 - tax_rate / 100))
-    st.success(f"✅ Calculated WACC: {wacc:.2f}%")
-else:
-    wacc = 0
-    st.warning("⚠️ Enter valid equity and debt values to calculate WACC.")
-
-
+# Step 2: DCF Inputs
 st.markdown("---")
 st.subheader("Step 2: DCF Inputs")
 
@@ -95,7 +69,7 @@ st.markdown(f"**Calculated WACC as Discount Rate:** {wacc*100:.2f}%")
 years = st.slider("Number of years to project", min_value=1, max_value=10, value=5)
 terminal_growth = st.number_input("Terminal growth rate (%)", min_value=0.0, value=2.0, step=0.5)
 
-# DCF calculation
+# DCF Calculation
 fcf_list = []
 for i in range(1, years + 1):
     future_fcf = fcf * (1 + growth_rate / 100) ** i
@@ -104,16 +78,24 @@ for i in range(1, years + 1):
 
 # Terminal value
 last_fcf = fcf * (1 + growth_rate / 100) ** years
-terminal_value = (last_fcf * (1 + terminal_growth / 100)) / (discount_rate / 100 - terminal_growth / 100)
+try:
+    terminal_value = (last_fcf * (1 + terminal_growth / 100)) / (discount_rate / 100 - terminal_growth / 100)
+except ZeroDivisionError:
+    terminal_value = 0
 discounted_terminal = terminal_value / ((1 + discount_rate / 100) ** years)
 
 dcf_value = sum(fcf_list) + discounted_terminal
 st.subheader(f"💰 Estimated Intrinsic Value: **${round(dcf_value, 2)} million**")
-# Fetch number of shares outstanding
-shares_outstanding = stock.info.get("sharesOutstanding", None)
+
+# Implied Share Price
+shares_outstanding = 0
+try:
+    shares_outstanding = stock.info.get("sharesOutstanding", 0)
+except:
+    pass
 
 if shares_outstanding and shares_outstanding > 0:
-    implied_price = (dcf_value * 1e6) / shares_outstanding  # Convert millions back to units
+    implied_price = (dcf_value * 1e6) / shares_outstanding
     st.write(f"📊 **Implied Share Price:** ${implied_price:.2f}")
 else:
     st.warning("⚠️ Could not fetch shares outstanding to calculate implied share price.")
@@ -138,10 +120,9 @@ if all(v > 0 for v in values):
 else:
     st.warning("⚠️ Unable to display pie chart: Values must be positive.")
 
-
+# Sensitivity Table
 st.subheader("📊 Sensitivity Analysis")
 
-# Ranges
 discount_rates = [0.08, 0.09, 0.10, 0.11, 0.12]
 growth_rates = [0.01, 0.02, 0.03, 0.04, 0.05]
 
@@ -152,10 +133,13 @@ for g in growth_rates:
         intrinsic = 0
         for i in range(years):
             intrinsic += fcf / ((1 + r) ** (i + 1))
-        terminal = (fcf * (1 + g)) / (r - g)
+        try:
+            terminal = (fcf * (1 + g)) / (r - g)
+        except ZeroDivisionError:
+            terminal = 0
         terminal /= (1 + r) ** years
-        total_value = intrinsic + terminal
-        row.append(round(total_value, 2))
+        total_val = intrinsic + terminal
+        row.append(round(total_val, 2))
     table.append(row)
 
 df_table = pd.DataFrame(
