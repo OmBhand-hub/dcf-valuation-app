@@ -31,9 +31,27 @@ if ticker:
         else:
             fcf = 0
 
-        fcf = round(fcf / 1e6, 2)  # convert to millions
-        equity_value = round(equity_value, 2)
-        debt_value = round(debt_value, 2)
+        fcf = fcf or 0
+equity_value = equity_value or 0
+debt_value = debt_value or 0
+
+# Display values
+st.success(f"Fetched values for {ticker.upper()}: FCF = {fcf/1e6:.1f}M, Equity = {equity_value:,}, Debt = ${debt_value:,}")
+# Calculate total value and WACC inputs
+total_value = equity_value + debt_value
+
+if total_value > 0:
+    cost_of_equity = 10  # you can later make this an input
+    cost_of_debt = 5
+    tax_rate = st.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, step=0.1, value=21.0)
+
+    wacc = ((equity_value / total_value) * (cost_of_equity / 100)) + \
+           ((debt_value / total_value) * (cost_of_debt / 100) * (1 - tax_rate / 100))
+
+    st.success(f"✅ Calculated WACC: {wacc:.2%}")
+else:
+    wacc = 0
+    st.warning("⚠️ Enter valid equity and debt values to calculate WACC.")
 
         st.success(f"Fetched values for {ticker}: FCF = ${fcf}M, Equity = ${equity_value}, Debt = ${debt_value}")
     except Exception as e:
