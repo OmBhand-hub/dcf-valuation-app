@@ -58,6 +58,8 @@ tax_rate = st.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=10
 total_value = equity_value + debt_value
 
 if total_value > 0:
+    cost_of_equity = 10  # assume 10% cost of equity
+cost_of_debt = 5     # assume 5% cost of debt
     wacc = ((equity_value / total_value) * (cost_of_equity / 100)) + \
            ((debt_value / total_value) * (cost_of_debt / 100) * (1 - tax_rate / 100))
     st.success(f"✅ Calculated WACC: {wacc:.2f}%")
