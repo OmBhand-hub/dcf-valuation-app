@@ -17,36 +17,54 @@ if ticker:
     try:
         stock = yf.Ticker(ticker)
 
-        # Fetch Market Cap (Equity Value)
+        # --- EQUITY VALUE ---
         equity_value = stock.info.get("marketCap", 0)
 
-        # Fetch Total Liabilities (as proxy for debt)
+        # --- DEBT VALUE ---
         balance_sheet = stock.balance_sheet
-        st.write("📄 Raw Balance Sheet:")
-        st.dataframe(balance_sheet)
-
+        debt_value = 0
         try:
-            debt_value = float(balance_sheet.loc["Total Liab"][0])
-        except:
-            debt_value = 0
+            if "Total Liab" in balance_sheet.index:
+                debt_value = float(balance_sheet.loc["Total Liab"][0])
+            elif "Total Liabilities" in balance_sheet.index:
+                debt_value = float(balance_sheet.loc["Total Liabilities"][0])
+        except Exception as e:
+            st.warning(f"⚠️ Couldn't extract debt: {e}")
 
-
-        # Fetch Free Cash Flow
+        # --- FREE CASH FLOW ---
         cashflow = stock.cashflow
-        st.write("📄 Raw Cash Flow Statement:")
-        st.dataframe(cashflow)
-
+        fcf = 0
         try:
-            operating_cf = float(cashflow.loc["Total Cash From Operating Activities"][0])
-            capex = float(cashflow.loc["Capital Expenditures"][0])
-            fcf = operating_cf - capex
-        except:
-            fcf = 0
+            if "Free Cash Flow" in cashflow.index:
+                fcf = float(cashflow.loc["Free Cash Flow"][0])
+            elif (
+                "Total Cash From Operating Activities" in cashflow.index
+                and "Capital Expenditures" in cashflow.index
+            ):
+                op_cf = float(cashflow.loc["Total Cash From Operating Activities"][0])
+                capex = float(cashflow.loc["Capital Expenditures"][0])
+                fcf = op_cf - capex
+        except Exception as e:
+            st.warning(f"⚠️ Couldn't extract FCF: {e}")
 
-
+        # Ensure defaults if any are still missing
         fcf = fcf or 0
         equity_value = equity_value or 0
         debt_value = debt_value or 0
+
+        # --- Display fetched values ---
+        st.success(
+            f"Fetched values for {ticker.upper()}: "
+            f"FCF = ${fcf/1e6:.1f}M, Equity = ${equity_value:,.0f}, "
+            f"Debt = ${debt_value:,.0f}"
+        )
+
+    except Exception as e:
+        st.error(f"❌ Failed to fetch data for {ticker.upper()}. Reason: {e}")
+        fcf = 0
+        equity_value = 0
+        debt_value = 0
+
 
         st.success(f"Fetched values for {ticker.upper()}: FCF = {fcf/1e6:.1f}M, Equity = ${equity_value:,}, Debt = ${debt_value:,}")
 
