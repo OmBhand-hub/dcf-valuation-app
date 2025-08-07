@@ -22,17 +22,27 @@ if ticker:
 
         # Fetch Total Liabilities (as proxy for debt)
         balance_sheet = stock.balance_sheet
-        if "Total Liab" in balance_sheet.index:
+        st.write("📄 Raw Balance Sheet:")
+        st.dataframe(balance_sheet)
+
+        try:
             debt_value = float(balance_sheet.loc["Total Liab"][0])
-        else:
+        except:
             debt_value = 0
+
 
         # Fetch Free Cash Flow
         cashflow = stock.cashflow
-        if "Total Cash From Operating Activities" in cashflow.index and "Capital Expenditures" in cashflow.index:
-            fcf = float(cashflow.loc["Total Cash From Operating Activities"][0] - cashflow.loc["Capital Expenditures"][0])
-        else:
+        st.write("📄 Raw Cash Flow Statement:")
+        st.dataframe(cashflow)
+
+        try:
+            operating_cf = float(cashflow.loc["Total Cash From Operating Activities"][0])
+            capex = float(cashflow.loc["Capital Expenditures"][0])
+            fcf = operating_cf - capex
+        except:
             fcf = 0
+
 
         fcf = fcf or 0
         equity_value = equity_value or 0
