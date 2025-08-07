@@ -88,6 +88,14 @@ discounted_terminal = terminal_value / ((1 + discount_rate / 100) ** years)
 
 dcf_value = sum(fcf_list) + discounted_terminal
 st.subheader(f"💰 Estimated Intrinsic Value: **${round(dcf_value, 2)} million**")
+# Fetch number of shares outstanding
+shares_outstanding = stock.info.get("sharesOutstanding", None)
+
+if shares_outstanding and shares_outstanding > 0:
+    implied_price = (dcf_value * 1e6) / shares_outstanding  # Convert millions back to units
+    st.write(f"📊 **Implied Share Price:** ${implied_price:.2f}")
+else:
+    st.warning("⚠️ Could not fetch shares outstanding to calculate implied share price.")
 
 # Charts
 years_range = list(range(1, years + 1))
