@@ -20,10 +20,10 @@ if ticker:
         # --- EQUITY VALUE ---
         equity_value = stock.info.get("marketCap", 0)
 
-  # --- DEBT VALUE ---
-debt_value = 0
+ # --- DEBT VALUE ---
 try:
     balance_sheet = stock.balance_sheet
+    debt_value = 0
 
     if balance_sheet is not None and not balance_sheet.empty:
         if "Total Liab" in balance_sheet.index:
@@ -32,9 +32,11 @@ try:
             debt_value = balance_sheet["Total Liab"].dropna().values[0]
 
     debt_value = float(debt_value)
+
 except Exception as e:
     st.warning(f"⚠️ Couldn't extract debt: {e}")
     debt_value = 0
+
     
 
         # --- FREE CASH FLOW ---
