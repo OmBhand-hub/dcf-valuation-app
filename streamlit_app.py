@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import yfinance as yf
+import html  # for safe escaping in the custom panel
 
 # ----------------------------
 # Helpers
@@ -34,6 +35,8 @@ def money(x):
 
 def green_panel(title: str, lines: list[str]):
     """Clean, consistent green box (no markdown quirks)."""
+    safe_title = html.escape(title)
+    safe_lines = [html.escape(line) for line in lines]
     st.markdown(
         f"""
         <div style="
@@ -41,9 +44,9 @@ def green_panel(title: str, lines: list[str]):
             border:1px solid #14532d;
             border-radius:12px;
             padding:16px;">
-            <div style="font-weight:600; margin-bottom:6px;">{title}</div>
+            <div style="font-weight:600; margin-bottom:6px;">{safe_title}</div>
             <div style="line-height:1.6;">
-                {"<br>".join([st._escape_html(line) for line in lines])}
+                {"<br>".join(safe_lines)}
             </div>
         </div>
         """,
