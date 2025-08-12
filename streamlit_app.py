@@ -59,14 +59,15 @@ def green_panel(title: str, lines: list[str]):
 st.set_page_config(page_title="DCF Valuation App", layout="centered")
 st.title("📊 DCF Valuation App")
 
-# Intro / How it works
+# Intro / How it works (unchanged)
 st.markdown("""
 ### How it works
-This app estimates a company's intrinsic value using a **Discounted Cash Flow (DCF)** model.
+This app estimates a company's intrinsic value using a Discounted Cash Flow (DCF) model.
+We now discount **Free Cash Flow to Equity (FCFE)** at the **Cost of Equity** and use a **3-year average FCFE** to stabilize inputs.
 
 **Steps:**
 1) Fetch Free Cash Flow, Market Cap (Equity), and Debt from Yahoo Finance  
-2) Compute WACC (fixed assumptions)  
+2) Set discount rate (Cost of Equity)  
 3) Project and discount future cash flows + terminal value  
 4) Compare implied price vs market with your Margin of Safety
 """)
@@ -79,9 +80,11 @@ st.subheader("Step 1: Fetch the company's financials")
 
 ticker = st.text_input("Enter stock ticker (e.g., AAPL, MSFT, TSLA)", value="AAPL")
 
-fcf = 0.0
+# working vars
 equity_value = 0.0
 debt_value = 0.0
+fcfe_latest = 0.0
+fcfe_avg3 = 0.0
 
 if ticker:
     try:
@@ -96,8 +99,8 @@ if ticker:
             bs_sources = [stock.balance_sheet, stock.quarterly_balance_sheet]
             for bs in bs_sources:
                 if bs is not None and not bs.empty:
-                    # match either "Total Liab" or "Total Liabilities" (case-insensitive)
-                    matches = [idx for idx in bs.index if ("total liab" in str(idx).lower()) or ("total liabilities" in str(idx).lower())]
+                    matches = [idx for idx in bs.index
+                               if ("total liab" in str(idx).lower()) or ("total liabilities" in str(idx).lower())]
                     if matches:
                         debt_value = float(pd.Series(bs.loc[matches[0]]).dropna().iloc[0])
                         break
@@ -105,92 +108,86 @@ if ticker:
             st.warning(f"⚠️ Couldn't extract debt: {e}")
             debt_value = 0.0
 
-        # --- FREE CASH FLOW ---
+        # --- FCFE: use Yahoo "Free Cash Flow" (CFO - CapEx), compute 3-year average ---
+        fcfe_series = None
         try:
-            cashflow = stock.cashflow
-            if cashflow is not None and not cashflow.empty:
-                if "Free Cash Flow" in cashflow.index:
-                    fcf = float(pd.Series(cashflow.loc["Free Cash Flow"]).dropna().iloc[0])
-                elif (
-                    "Total Cash From Operating Activities" in cashflow.index
-                    and "Capital Expenditures" in cashflow.index
-                ):
-                    op_cf = float(pd.Series(cashflow.loc["Total Cash From Operating Activities"]).dropna().iloc[0])
-                    capex = float(pd.Series(cashflow.loc["Capital Expenditures"]).dropna().iloc[0])
-                    fcf = op_cf - capex
+            cf = stock.cashflow  # annual; columns newest->oldest
+            if cf is not None and not cf.empty:
+                if "Free Cash Flow" in cf.index:
+                    fcfe_series = pd.Series(cf.loc["Free Cash Flow"]).dropna()
+                elif ("Total Cash From Operating Activities" in cf.index) and ("Capital Expenditures" in cf.index):
+                    op = pd.Series(cf.loc["Total Cash From Operating Activities"]).fillna(0)
+                    capex = pd.Series(cf.loc["Capital Expenditures"]).fillna(0)
+                    fcfe_series = (op - capex).dropna()
         except Exception as e:
-            st.warning(f"⚠️ Couldn't extract FCF: {e}")
+            st.warning(f"⚠️ Couldn't extract FCFE: {e}")
 
-        # Defaults if missing
-        fcf = float(fcf or 0.0)
-        equity_value = float(equity_value or 0.0)
-        debt_value = float(debt_value or 0.0)
+        if fcfe_series is not None and not fcfe_series.empty:
+            fcfe_latest = float(fcfe_series.iloc[0])
+            fcfe_avg3 = float(fcfe_series.iloc[:3].mean()) if len(fcfe_series) >= 1 else float(fcfe_series.iloc[0])
+        else:
+            fcfe_latest = 0.0
+            fcfe_avg3 = 0.0
 
-        # --- Clean fetched-values panel (uniform font/size, one item per line) ---
+        # --- Clean fetched-values panel ---
         green_panel(
             f"Fetched values for {ticker.upper()}:",
             [
-                f"Free Cash Flow: {money_short(fcf)}",
+                f"Free Cash Flow to Equity (latest): {money_short(fcfe_latest)}",
+                f"Free Cash Flow to Equity (3-yr avg): {money_short(fcfe_avg3)}",
                 f"Equity Value (Market Cap): {money_short(equity_value)}",
-                f"Debt: {money_short(debt_value)}",
+                f"Debt (Total Liabilities proxy if needed): {money_short(debt_value)}",
             ],
         )
 
     except Exception as e:
         st.error(f"❌ Failed to fetch data for {ticker.upper()}. Reason: {e}")
-        fcf = equity_value = debt_value = 0.0
+        equity_value = debt_value = fcfe_latest = fcfe_avg3 = 0.0
 
 # ----------------------------
-# Step 2: WACC Calculation
-# ----------------------------
-st.markdown("---")
-st.subheader("Step 2: Calculate the company's cost of capital")
-
-tax_rate = st.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, value=21.0, step=0.1)
-total_value = equity_value + debt_value
-
-if total_value > 0:
-    cost_of_equity = 10.0  # %
-    cost_of_debt = 5.0     # %
-    # wacc is a DECIMAL (e.g., 0.085)
-    wacc = ((equity_value / total_value) * (cost_of_equity / 100.0)) + \
-           ((debt_value / total_value) * (cost_of_debt / 100.0) * (1 - tax_rate / 100.0))
-    st.info(f"Calculated WACC: **{wacc:.2%}**")
-else:
-    wacc = 0.0
-    st.warning("⚠️ Enter a valid ticker to compute WACC.")
-
-# ----------------------------
-# Step 3: Project the company's future cash flows
+# Step 2: Discount rate (Cost of Equity)
 # ----------------------------
 st.markdown("---")
-st.subheader("Step 3: Project the company’s future cash flows")
+st.subheader("Step 2: Set the discount rate (Cost of Equity)")
 
-growth_rate = st.number_input("Expected annual growth rate (%)", min_value=0.0, value=5.0, step=0.5)
+# Keep your original fixed assumption so it's explainable
+cost_of_equity_pct = st.number_input("Cost of Equity (%)", min_value=0.0, max_value=30.0, value=10.0, step=0.5)
+ke = cost_of_equity_pct / 100.0  # decimal
+st.info(f"Using Cost of Equity: **{cost_of_equity_pct:.2f}%**")
+
+# ----------------------------
+# Step 3: Project the company's future cash flows (FCFE)
+# ----------------------------
+st.markdown("---")
+st.subheader("Step 3: Project the company’s future cash flows (FCFE)")
+
+growth_rate = st.number_input("Expected annual growth rate (%)", min_value=0.0, value=6.0, step=0.5)
 years = st.slider("Number of years to project", min_value=1, max_value=10, value=5)
 terminal_growth = st.number_input("Terminal growth rate (%)", min_value=0.0, value=2.0, step=0.5)
 
-# DCF Calculation (keep units consistent: all in $)
-fcf_list = []
+base_fcfe = fcfe_avg3  # stabilized starting point
+
+# DCF on FCFE discounted at Cost of Equity
+fcfe_pvs = []
 for i in range(1, years + 1):
-    future_fcf = fcf * (1 + growth_rate / 100.0) ** i
-    discounted_fcf = future_fcf / ((1 + wacc) ** i)  # wacc is decimal
-    fcf_list.append(discounted_fcf)
+    future_fcfe = base_fcfe * (1 + growth_rate / 100.0) ** i
+    pv_fcfe = future_fcfe / ((1 + ke) ** i)
+    fcfe_pvs.append(pv_fcfe)
 
-last_fcf = fcf * (1 + growth_rate / 100.0) ** years
+last_fcfe = base_fcfe * (1 + growth_rate / 100.0) ** years
 try:
-    terminal_value = (last_fcf * (1 + terminal_growth / 100.0)) / (wacc - terminal_growth / 100.0)
+    terminal_equity_value = (last_fcfe * (1 + terminal_growth / 100.0)) / (ke - terminal_growth / 100.0)
+    terminal_equity_pv = terminal_equity_value / ((1 + ke) ** years)
 except Exception:
-    terminal_value = 0.0
-discounted_terminal = terminal_value / ((1 + wacc) ** years)
+    terminal_equity_pv = 0.0
 
-dcf_value = sum(fcf_list) + discounted_terminal   # still in $
+intrinsic_equity_value = sum(fcfe_pvs) + terminal_equity_pv  # this is TOTAL equity value ($)
 
 st.subheader("Estimated Intrinsic Value (DCF)")
-st.metric("Intrinsic Value", money_short(dcf_value))
+st.metric("Intrinsic Equity Value", money_short(intrinsic_equity_value))
 
 # ----------------------------
-# Step 4: Implied share price & valuation flag
+# Step 4: Compare to market price
 # ----------------------------
 st.markdown("---")
 st.subheader("Step 4: Compare to market price")
@@ -199,16 +196,16 @@ st.subheader("Step 4: Compare to market price")
 shares_outstanding = 0
 current_price = None
 try:
-    shares_outstanding = int(stock.info.get("sharesOutstanding", 0) or 0)
+    shares_outstanding = int(yf.Ticker(ticker).info.get("sharesOutstanding", 0) or 0)
 except Exception:
     shares_outstanding = 0
 try:
-    current_price = float(stock.history(period="1d")["Close"].iloc[-1])
+    current_price = float(yf.Ticker(ticker).history(period="1d")["Close"].iloc[-1])
 except Exception:
     current_price = None
 
 if shares_outstanding > 0:
-    implied_price = dcf_value / shares_outstanding  # both $ units, so per-share $
+    implied_price = intrinsic_equity_value / shares_outstanding  # per-share equity value
     mos = st.slider("Margin of Safety (%)", min_value=0, max_value=50, value=20, step=5)
     target_price = implied_price * (1 - mos / 100.0)
 
@@ -235,16 +232,16 @@ else:
 # Step 5: Charts
 # ----------------------------
 st.markdown("---")
-st.subheader("📈 Projected Free Cash Flows")
+st.subheader("📈 Projected Free Cash Flows (FCFE)")
 
 years_range = list(range(1, years + 1))
-future_fcf_list = [fcf * (1 + growth_rate / 100.0) ** i for i in years_range]
-fcf_df = pd.DataFrame({'Year': years_range, 'Future FCF': future_fcf_list})
+future_fcfe_list = [base_fcfe * (1 + growth_rate / 100.0) ** i for i in years_range]
+fcf_df = pd.DataFrame({'Year': years_range, 'Future FCFE': future_fcfe_list})
 st.line_chart(fcf_df.set_index("Year"))
 
 st.subheader("💰 Intrinsic Value Breakdown")
-labels = ['Discounted FCF', 'Discounted Terminal Value']
-values = [sum(fcf_list), discounted_terminal]
+labels = ['Sum of PV(FCFE)', 'PV(Terminal Equity)']
+values = [sum(fcfe_pvs), terminal_equity_pv]
 if all(v > 0 for v in values):
     fig, ax = plt.subplots()
     ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90)
@@ -254,13 +251,13 @@ else:
     st.warning("⚠️ Unable to display pie chart: values must be positive.")
 
 # ----------------------------
-# Step 6: Sensitivity Table
+# Step 6: Sensitivity Table (FCFE-based)
 # ----------------------------
 st.markdown("---")
-st.subheader("📊 Sensitivity Analysis (constant FCF toy model)")
+st.subheader("📊 Sensitivity Analysis (constant FCFE toy model)")
 
-discount_rates = [0.08, 0.09, 0.10, 0.11, 0.12]
-growth_rates = [0.01, 0.02, 0.03, 0.04, 0.05]
+discount_rates = [0.07, 0.08, 0.09, 0.10, 0.11]  # as decimals (Cost of Equity scenarios)
+growth_rates = [0.02, 0.04, 0.06, 0.08]          # growth scenarios
 
 table = []
 for g in growth_rates:
@@ -268,9 +265,10 @@ for g in growth_rates:
     for r in discount_rates:
         intrinsic = 0.0
         for i in range(years):
-            intrinsic += fcf / ((1 + r) ** (i + 1))
+            intrinsic += base_fcfe * (1 + g) ** (i + 1) / ((1 + r) ** (i + 1))
         try:
-            terminal = (fcf * (1 + g)) / (r - g)
+            last = base_fcfe * (1 + g) ** years
+            terminal = (last * (1 + g)) / (r - g)
         except Exception:
             terminal = 0.0
         terminal /= (1 + r) ** years
