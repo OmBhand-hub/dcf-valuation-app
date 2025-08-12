@@ -52,38 +52,40 @@ def _get_current_price(stock: yf.Ticker):
 st.set_page_config(page_title="DCF Valuation App", layout="centered")
 st.title("📊 DCF Valuation App")
 
-# Simple explainer so you can describe the app clearly
-with st.expander("How this app works (read me)"):
+# Sidebar: preferences (and a toggle to hide/show explainer)
+st.sidebar.header("Investor Settings")
+show_explainer = st.sidebar.checkbox("Show explainer", value=True)
+mos_percent = st.sidebar.slider("Margin of Safety Threshold (%)", min_value=0, max_value=50, value=25, step=1)
+tax_rate = st.sidebar.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, value=21.0, step=0.1)
+
+# Always-visible explainer (can be hidden from sidebar)
+if show_explainer:
     st.markdown(
         """
+### How this app works
 **What it does:**  
-- Pulls basic financials with yfinance.  
-- Estimates intrinsic value using a simple DCF (project FCF → discount → add terminal value).  
-- Compares implied share price vs current market price.  
-- Flags undervalued / overvalued using your Margin of Safety.
+• Pulls basic financials with yfinance.  
+• Estimates intrinsic value using a simple DCF (project FCF → discount → terminal value).  
+• Compares implied share price vs current market price.  
+• Flags undervalued / overvalued using your Margin of Safety.
 
-**Key inputs (and meaning):**  
-- **FCF (auto)**: last reported free cash flow (or OCF − CapEx if FCF line missing).  
-- **WACC (auto)**: a quick mix of cost of equity and after-tax cost of debt from current cap structure.  
-- **Growth %**: expected annual FCF growth during the projection window.  
-- **Terminal growth %**: long-run growth after the projection (used in Gordon Growth).  
-- **Margin of Safety %**: your required discount vs market before calling something “undervalued”.
+**Key inputs (plain English):**  
+• **FCF (auto):** last reported free cash flow (or OCF − CapEx if FCF line missing).  
+• **WACC (auto):** quick mix of cost of equity and after-tax cost of debt from current cap structure.  
+• **Growth %:** expected annual FCF growth during the projection window.  
+• **Terminal growth %:** long-run growth after the projection (Gordon Growth).  
+• **Margin of Safety %:** your required discount vs market before calling it “undervalued”.
 
-**Core formulas (high level):**  
-- Discounted FCF\_t = FCF\_t / (1 + WACC)^t  
-- Terminal Value = FCF\_last × (1 + g) / (WACC − g)  
-- Intrinsic Equity (per share) ≈ DCF total / Shares Outstanding  
-- Valuation flag: compare implied price to market with your MOS threshold.
-        """
+**Core formulas:**  
+• Discounted FCFₜ = FCFₜ / (1 + WACC)ᵗ  
+• Terminal Value = FCF_last × (1 + g) / (WACC − g)  
+• Implied Price = (DCF total value) / Shares Outstanding  
+• Label: compare implied price to market using your MOS threshold.
+"""
     )
 
 st.subheader("Enter Stock Ticker to Auto-Fill Financials")
 ticker = st.text_input("Enter stock ticker (e.g., AAPL, MSFT, TSLA)", value="AAPL")
-
-# Sidebar: keep investor preferences here (cleaner main pane)
-st.sidebar.header("Investor Settings")
-mos_percent = st.sidebar.slider("Margin of Safety Threshold (%)", min_value=0, max_value=50, value=25, step=1)
-tax_rate = st.sidebar.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, value=21.0, step=0.1)
 
 # Working variables
 fcf = 0.0
@@ -162,7 +164,7 @@ if ticker:
             f"FCF = ${fcf/1e6:.1f}M, Equity = ${equity_value:,.0f}, Debt = ${debt_value:,.0f}"
         )
 
-        # Optional: inspect what Yahoo calls the rows (helps you explain)
+        # Optional: inspect Yahoo row names
         with st.expander("Balance sheet rows (debug)"):
             try:
                 st.write(list(map(str, balance_sheet.index)))
@@ -305,4 +307,3 @@ df_table = pd.DataFrame(
 st.dataframe(df_table.style.format("{:.2f}"), height=250)
 
 st.markdown("© 2025 Om Bhand. All rights reserved.", unsafe_allow_html=True)
-
