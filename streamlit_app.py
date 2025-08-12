@@ -48,6 +48,50 @@ def _get_current_price(stock: yf.Ticker):
         pass
     return None
 
+def money_short(x):
+    """Format currency with M/B suffix (2 dp). e.g., $1.23B, $456.78M, $12,345.67"""
+    if x is None:
+        return "N/A"
+    try:
+        x = float(x)
+    except Exception:
+        return "N/A"
+    ax = abs(x)
+    if ax >= 1e9:
+        return f"${x/1e9:,.2f}B"
+    elif ax >= 1e6:
+        return f"${x/1e6:,.2f}M"
+    else:
+        return f"${x:,.2f}"
+
+def money(x):
+    """Plain currency with commas and 2 dp. e.g., $123.45"""
+    if x is None:
+        return "N/A"
+    try:
+        return f"${float(x):,.2f}"
+    except Exception:
+        return "N/A"
+
+def valuation_badge(label: str, color: str):
+    """Render a bold colored badge."""
+    st.markdown(
+        f"""
+        <div style="
+            display:inline-block;
+            padding:10px 16px;
+            border-radius:12px;
+            background:{color};
+            color:white;
+            font-weight:700;
+            font-size:16px;
+            ">
+            {label}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
 # ------------------ App UI ------------------
 st.set_page_config(page_title="DCF Valuation App", layout="centered")
 st.title("📊 DCF Valuation App")
@@ -58,7 +102,7 @@ show_explainer = st.sidebar.checkbox("Show explainer", value=True)
 mos_percent = st.sidebar.slider("Margin of Safety Threshold (%)", min_value=0, max_value=50, value=25, step=1)
 tax_rate = st.sidebar.number_input("Corporate Tax Rate (%)", min_value=0.0, max_value=100.0, value=21.0, step=0.1)
 
-# Always-visible explainer (can be hidden from sidebar)
+# Always-visible explainer (toggleable)
 if show_explainer:
     st.markdown(
         """
@@ -84,7 +128,9 @@ if show_explainer:
 """
     )
 
-st.subheader("Enter Stock Ticker to Auto-Fill Financials")
+st.markdown("---")
+
+st.subheader("Step 1: Pull the company’s key financials")
 ticker = st.text_input("Enter stock ticker (e.g., AAPL, MSFT, TSLA)", value="AAPL")
 
 # Working variables
@@ -158,10 +204,10 @@ if ticker:
         equity_value = float(equity_value or 0.0)
         debt_value = float(debt_value or 0.0)
 
-        # Quick confirmation
+        # Quick confirmation (formatted with M/B suffixes)
         st.success(
             f"Fetched values for {ticker.upper()}: "
-            f"FCF = ${fcf/1e6:.1f}M, Equity = ${equity_value:,.0f}, Debt = ${debt_value:,.0f}"
+            f"FCF = {money_short(fcf)}, Equity = {money_short(equity_value)}, Debt = {money_short(debt_value)}"
         )
 
         # Optional: inspect Yahoo row names
@@ -176,9 +222,10 @@ if ticker:
         fcf = equity_value = debt_value = 0.0
         current_price = None
 
-st.markdown("Estimate the intrinsic value of a company using a Discounted Cash Flow (DCF) model.")
+st.markdown("---")
 
 # ------------------ WACC (lightweight) ------------------
+st.subheader("Step 2: Estimate the discount rate (WACC)")
 total_value = equity_value + debt_value
 if total_value > 0:
     cost_of_equity = 10.0  # simple default (%)
@@ -190,13 +237,13 @@ else:
     wacc = 0.0
     st.warning("⚠️ Enter valid equity and debt values to calculate WACC.")
 
-# ------------------ DCF Inputs ------------------
 st.markdown("---")
-st.subheader("Step 2: DCF Inputs")
 
+# ------------------ DCF Inputs ------------------
+st.subheader("Step 3: Project the company’s future cash flows")
 growth_rate = st.number_input("Expected annual growth rate (%)", min_value=0.0, value=5.0, step=0.5)
 discount_rate = wacc  # keep as decimal
-st.markdown(f"**Calculated WACC as Discount Rate:** {wacc*100:.2f}%")
+st.markdown(f"**Using WACC as Discount Rate:** {wacc*100:.2f}%")
 years = st.slider("Number of years to project", min_value=1, max_value=10, value=5)
 terminal_growth = st.number_input("Terminal growth rate (%)", min_value=0.0, value=2.0, step=0.5)
 
@@ -216,9 +263,14 @@ except Exception:
 discounted_terminal = terminal_value / ((1 + discount_rate) ** years)
 
 dcf_value = sum(fcf_list) + discounted_terminal  # currency units
-st.subheader(f"💰 Estimated Intrinsic Value: **${dcf_value/1e6:,.2f} million**")
 
-# ------------------ Implied Share Price + Valuation Flag ------------------
+st.markdown("---")
+
+# ------------------ Implied Price + Decision ------------------
+st.subheader("Step 4: Value the business and compare with market")
+
+st.metric("Estimated Intrinsic Value (DCF)", money_short(dcf_value))
+
 shares_outstanding = 0
 try:
     shares_outstanding = int(stock.info.get("sharesOutstanding", 0) or 0)
@@ -226,46 +278,48 @@ except Exception:
     shares_outstanding = 0
 
 if shares_outstanding > 0:
-    implied_price = dcf_value / shares_outstanding  # dcf_value in currency units
+    implied_price = dcf_value / shares_outstanding  # per share
     mos_threshold = mos_percent / 100.0
 
     cols = st.columns(4)
     with cols[0]:
-        st.metric("Current Price", f"${(current_price or 0):,.2f}")
+        st.metric("Current Price", money(current_price or 0))
     with cols[1]:
-        st.metric("Implied Price (DCF)", f"${implied_price:,.2f}")
+        st.metric("Implied Price (DCF)", money(implied_price))
     with cols[2]:
         if current_price:
-            gap = implied_price - current_price
-            gap_pct = gap / current_price
+            gap_pct = (implied_price - current_price) / current_price
             st.metric("Upside vs Market", f"{gap_pct*100:,.1f}%")
         else:
             st.metric("Upside vs Market", "N/A")
     with cols[3]:
         st.metric("Margin of Safety", f"{mos_percent}%")
 
-    # Label using your MOS: undervalued if implied >= price*(1+MOS); overvalued if implied <= price*(1−MOS)
+    # Badge using MOS threshold
     if current_price:
         upper = current_price * (1 + mos_threshold)
         lower = current_price * (1 - mos_threshold)
         if implied_price >= upper:
-            st.success(f"✅ **Undervalued** by ≥ {mos_percent}% vs market price.")
+            valuation_badge("UNDERVALUED", "#16a34a")  # green-600
         elif implied_price <= lower:
-            st.error(f"❌ **Overvalued** by ≥ {mos_percent}% vs market price.")
+            valuation_badge("OVERVALUED", "#dc2626")   # red-600
         else:
-            st.info(f"ℹ️ **Around fair value** (within ±{mos_percent}%).")
+            valuation_badge("AROUND FAIR VALUE", "#6b7280")  # gray-500
 else:
     st.warning("⚠️ Could not fetch shares outstanding to calculate implied share price.")
 
+st.markdown("---")
+
 # ------------------ Charts (simple and explainable) ------------------
+st.subheader("Visualise the projection")
 years_range = list(range(1, years + 1))
 future_fcf_list = [fcf * (1 + growth_rate / 100.0) ** i for i in years_range]
 
-st.subheader("📈 Projected Free Cash Flows")
+st.markdown("**Projected Free Cash Flows**")
 fcf_df = pd.DataFrame({'Year': years_range, 'Future FCF': future_fcf_list})
 st.line_chart(fcf_df.set_index("Year"))
 
-st.subheader("💰 Intrinsic Value Breakdown")
+st.markdown("**Intrinsic Value Breakdown**")
 labels = ['Discounted FCF', 'Discounted Terminal Value']
 values = [sum(fcf_list), discounted_terminal]
 
@@ -275,11 +329,12 @@ if all(v > 0 for v in values):
     ax.axis('equal')
     st.pyplot(fig)
 else:
-    st.warning("⚠️ Unable to display pie chart: Values must be positive.")
+    st.warning("⚠️ Unable to display pie chart: values must be positive.")
+
+st.markdown("---")
 
 # ------------------ Sensitivity Table (kept simple) ------------------
-st.subheader("📊 Sensitivity Analysis")
-
+st.subheader("Sensitivity: constant FCF toy model (millions)")
 discount_rates = [0.08, 0.09, 0.10, 0.11, 0.12]  # decimals
 growth_rates = [0.01, 0.02, 0.03, 0.04, 0.05]
 
@@ -296,7 +351,7 @@ for g in growth_rates:
             terminal = 0.0
         terminal /= (1 + r) ** years
         total_val = intrinsic + terminal
-        row.append(round(total_val / 1e6, 2))  # show in millions
+        row.append(round(total_val / 1e6, 2))  # show in millions with 2 dp
     table.append(row)
 
 df_table = pd.DataFrame(
@@ -306,4 +361,6 @@ df_table = pd.DataFrame(
 )
 st.dataframe(df_table.style.format("{:.2f}"), height=250)
 
+st.markdown("---")
+st.caption("This tool is for educational purposes and does not constitute investment advice.")
 st.markdown("© 2025 Om Bhand. All rights reserved.", unsafe_allow_html=True)
