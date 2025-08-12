@@ -23,6 +23,32 @@ def _latest_value(series):
     except Exception:
         return None
 
+def _get_current_price(stock):
+    # Try fast_info first
+    try:
+        fi = getattr(stock, "fast_info", None)
+        if fi:
+            for k in ("last_price", "lastPrice", "last"):
+                if k in fi and fi[k]:
+                    return float(fi[k])
+    except Exception:
+        pass
+    # Fallback to .info
+    try:
+        price = stock.info.get("currentPrice", None)
+        if price:
+            return float(price)
+    except Exception:
+        pass
+    # Final fallback to last close
+    try:
+        hist = stock.history(period="1d")
+        if hist is not None and not hist.empty:
+            return float(hist["Close"].iloc[-1])
+    except Exception:
+        pass
+    return None
+
 # ------------------ UI ------------------
 st.set_page_config(page_title="DCF Valuation App", layout="centered")
 st.title("📊 DCF Valuation App")
@@ -33,6 +59,7 @@ ticker = st.text_input("Enter stock ticker (e.g., AAPL, MSFT, TSLA)", value="AAP
 fcf = 0.0
 equity_value = 0.0
 debt_value = 0.0
+current_price = None
 
 if ticker:
     try:
@@ -43,6 +70,9 @@ if ticker:
             equity_value = float(stock.info.get("marketCap", 0.0) or 0.0)
         except Exception:
             equity_value = 0.0
+
+        # --- CURRENT MARKET PRICE (for valuation flag) ---
+        current_price = _get_current_price(stock)
 
         # --- DEBT VALUE (robust) ---
         try:
@@ -117,6 +147,7 @@ if ticker:
         fcf = 0.0
         equity_value = 0.0
         debt_value = 0.0
+        current_price = None
 
 st.markdown("Estimate the intrinsic value of a company using a Discounted Cash Flow (DCF) model.")
 
@@ -144,6 +175,10 @@ st.markdown(f"**Calculated WACC as Discount Rate:** {wacc*100:.2f}%")
 years = st.slider("Number of years to project", min_value=1, max_value=10, value=5)
 terminal_growth = st.number_input("Terminal growth rate (%)", min_value=0.0, value=2.0, step=0.5)
 
+# New: user-set margin of safety threshold
+mos_percent = st.slider("Margin of Safety Threshold (%)", min_value=0, max_value=50, value=25, step=1)
+mos_threshold = mos_percent / 100.0
+
 # ------------------ DCF Calculation ------------------
 fcf_list = []
 for i in range(1, years + 1):
@@ -160,10 +195,9 @@ except Exception:
 discounted_terminal = terminal_value / ((1 + discount_rate) ** years)
 
 dcf_value = sum(fcf_list) + discounted_terminal  # currency units
-
 st.subheader(f"💰 Estimated Intrinsic Value: **${dcf_value/1e6:,.2f} million**")
 
-# ------------------ Implied Share Price ------------------
+# ------------------ Implied Share Price + Valuation Flag ------------------
 shares_outstanding = 0
 try:
     shares_outstanding = int(stock.info.get("sharesOutstanding", 0) or 0)
@@ -171,8 +205,33 @@ except Exception:
     shares_outstanding = 0
 
 if shares_outstanding > 0:
-    implied_price = dcf_value / shares_outstanding  # use raw dcf_value (not the /1e6 display)
-    st.write(f"📊 **Implied Share Price:** ${implied_price:.2f}")
+    implied_price = dcf_value / shares_outstanding  # dcf_value is in currency units
+
+    cols = st.columns(4)
+    with cols[0]:
+        st.metric("Current Price", f"${(current_price or 0):,.2f}")
+    with cols[1]:
+        st.metric("Implied Price (DCF)", f"${implied_price:,.2f}")
+    with cols[2]:
+        if current_price:
+            gap = implied_price - current_price
+            gap_pct = gap / current_price
+            st.metric("Upside vs Market", f"{gap_pct*100:,.1f}%")
+        else:
+            st.metric("Upside vs Market", "N/A")
+    with cols[3]:
+        st.metric("Margin of Safety", f"{mos_percent}%")
+
+    # Label using MOS threshold: undervalued if implied >= price*(1+MOS), overvalued if implied <= price*(1-MOS)
+    if current_price:
+        upper = current_price * (1 + mos_threshold)
+        lower = current_price * (1 - mos_threshold)
+        if implied_price >= upper:
+            st.success(f"✅ **Undervalued** by ≥ {mos_percent}% vs market price.")
+        elif implied_price <= lower:
+            st.error(f"❌ **Overvalued** by ≥ {mos_percent}% vs market price.")
+        else:
+            st.info(f"ℹ️ **Around fair value** (within ±{mos_percent}%).")
 else:
     st.warning("⚠️ Could not fetch shares outstanding to calculate implied share price.")
 
@@ -216,6 +275,7 @@ for g in growth_rates:
         terminal /= (1 + r) ** years
         total_val = intrinsic + terminal
         row.append(round(total_val / 1e6, 2))  # show in millions
+    row = [x for x in row]
     table.append(row)
 
 df_table = pd.DataFrame(
@@ -226,5 +286,3 @@ df_table = pd.DataFrame(
 st.dataframe(df_table.style.format("{:.2f}"), height=250)
 
 st.markdown("© 2025 Om Bhand. All rights reserved.", unsafe_allow_html=True)
-
-
