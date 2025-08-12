@@ -4,10 +4,10 @@ import matplotlib.pyplot as plt
 import yfinance as yf
 
 # ----------------------------
-# Helper: Short number formatting with M/B/T
+# Helpers
 # ----------------------------
 def money_short(x):
-    """Format number with $ and M/B/T suffix, rounded to 2 decimal places."""
+    """Format number with $ and M/B/T suffix, 2 dp, with commas."""
     if x is None:
         return "N/A"
     try:
@@ -31,6 +31,24 @@ def money(x):
         return f"${float(x):,.2f}"
     except Exception:
         return "N/A"
+
+def green_panel(title: str, lines: list[str]):
+    """Clean, consistent green box (no markdown quirks)."""
+    st.markdown(
+        f"""
+        <div style="
+            background:#143D2A;
+            border:1px solid #14532d;
+            border-radius:12px;
+            padding:16px;">
+            <div style="font-weight:600; margin-bottom:6px;">{title}</div>
+            <div style="line-height:1.6;">
+                {"<br>".join([st._escape_html(line) for line in lines])}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 # ----------------------------
 # Streamlit Page Config
@@ -105,12 +123,14 @@ if ticker:
         equity_value = float(equity_value or 0.0)
         debt_value = float(debt_value or 0.0)
 
-        # --- Clean, consistent fetched-values box (no LaTeX/bold) ---
-        st.success(
-            "Fetched values for " + ticker.upper() + ":\n"
-            + "Free Cash Flow: " + money_short(fcf) + "\n"
-            + "Equity Value (Market Cap): " + money_short(equity_value) + "\n"
-            + "Debt: " + money_short(debt_value)
+        # --- Clean fetched-values panel (uniform font/size, one item per line) ---
+        green_panel(
+            f"Fetched values for {ticker.upper()}:",
+            [
+                f"Free Cash Flow: {money_short(fcf)}",
+                f"Equity Value (Market Cap): {money_short(equity_value)}",
+                f"Debt: {money_short(debt_value)}",
+            ],
         )
 
     except Exception as e:
